@@ -1,0 +1,6 @@
+.DS_Store
+visual_logs
+sports1m_finetuning_ucf101.model.mdlp
+datasets
+models
+__pycache__
