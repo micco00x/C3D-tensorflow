@@ -7,7 +7,7 @@ from tensorflow.python.client import timeline
 
 
 import sys
-sys.path.append("tf-openpose")
+sys.path.append("third_party/tf-openpose")
 from common import estimate_pose, draw_humans
 from networks import get_network
 
@@ -29,7 +29,7 @@ def compute_pose_frame(input_image, sess):
         # load pretrained weights
         print(first_time)
         s = "%dx%d" % (input_node.shape[2], input_node.shape[1])
-        ckpts = "./tf-openpose/models/trained/mobilenet_" + s + "/model-release"
+        ckpts = "./third_party/tf-openpose/models/trained/mobilenet_" + s + "/model-release"
         vars_in_checkpoint = tf.train.list_variables(ckpts)
         var_rest = []
         for el in vars_in_checkpoint:

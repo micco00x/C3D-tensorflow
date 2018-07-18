@@ -201,9 +201,11 @@ def run_training():
                 frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
                 im_size=c3d_model.CROP_SIZE,
                 sess=sess)
+            start_train_time = time.time()
             sess.run(train_op, feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
-            duration = time.time() - start_time
-            print('Step %d: %.3f sec' % (step, duration))
+            curr_time = time.time()
+            duration = curr_time - start_time
+            print('Step %d: %.3f sec - %.3f sec' % (step, duration, curr_time - start_train_time))
 
             # Save a checkpoint and evaluate the model periodically.
             if (step) % 10 == 0 or (step + 1) == FLAGS.max_steps:
