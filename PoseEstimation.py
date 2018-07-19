@@ -27,7 +27,7 @@ def compute_pose_frame(input_image, sess):
     global first_time
     if first_time:
         # load pretrained weights
-        print(first_time)
+        #print(first_time)
         s = "%dx%d" % (input_node.shape[2], input_node.shape[1])
         ckpts = "./third_party/tf-openpose/models/trained/mobilenet_" + s + "/model-release"
         vars_in_checkpoint = tf.train.list_variables(ckpts)

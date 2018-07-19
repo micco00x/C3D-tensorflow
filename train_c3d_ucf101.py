@@ -101,6 +101,24 @@ def _variable_with_weight_decay(name, shape, wd):
         tf.add_to_collection('weightdecay_losses', weight_decay)
     return var
 
+# Return a dataset (X, y) given a .npz filename and a .json filename:
+def _generate_dataset(npz_filename, sess, videos_folder=None, json_filename=None):
+    # Generate a dataset if the .npz file does not exist:
+    if os.path.isfile(npz_filename):
+        npzfile = np.load(npz_filename)
+        X = npzfile["X"]
+        y = npzfile["y"]
+    else:
+        X, y = input_data.generate_dataset(
+            videos_folder=videos_folder,
+            json_filename=json_filename,
+            frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
+            im_size=c3d_model.CROP_SIZE,
+            sess=sess,
+            output_filename=npz_filename
+        )
+    return X, y
+
 def run_training():
     # Get the sets of images and labels for training, validation, and
     # Tell TensorFlow that the model will be built into the default Graph.
@@ -193,14 +211,28 @@ def run_training():
         merged = tf.summary.merge_all()
         train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
         test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
+
+        # TODO: pass these as args:
+        videos_folder = "datasets/Dataset_PatternRecognition/H3.6M"
+        train_json_filename = "datasets/Dataset_PatternRecognition/json/dataset_training.json"
+        train_npz_filename = "datasets/Dataset_PatternRecognition/npz/dataset_training.npz"
+        val_json_filename = "datasets/Dataset_PatternRecognition/json/dataset_testing.json"
+        val_npz_filename = "datasets/Dataset_PatternRecognition/npz/dataset_testing.npz"
+
+        # Generate datasets:
+        train_X, train_y = _generate_dataset(train_npz_filename, sess, videos_folder, train_json_filename)
+        val_X, val_y = _generate_dataset(val_npz_filename, sess, videos_folder, val_json_filename)
+
+        # Rescale train_X and val_X from [0,255] to [0,1]:
+        train_X = train_X.astype(np.float32) / 255.0
+        val_X = val_X.astype(np.float32) / 255.0
+
         for step in xrange(FLAGS.max_steps):
             start_time = time.time()
-            train_images, train_labels = input_data.read_clip_and_label(
-                json_filename="datasets/Dataset_PatternRecognition/json/dataset_training.json",
-                batch_size=FLAGS.batch_size * gpu_num,
-                frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
-                im_size=c3d_model.CROP_SIZE,
-                sess=sess)
+            # Select a random batch:
+            rand_indices = np.random.randint(train_X.shape[0], size=FLAGS.batch_size * gpu_num)
+            train_images = train_X[rand_indices]
+            train_labels = train_y[rand_indices]
             start_train_time = time.time()
             sess.run(train_op, feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
             curr_time = time.time()
@@ -215,12 +247,10 @@ def run_training():
                 print ("accuracy: " + "{:.5f}".format(acc))
                 train_writer.add_summary(summary, step)
                 print('Validation Data Eval:')
-                val_images, val_labels = input_data.read_clip_and_label(
-                    json_filename="datasets/Dataset_PatternRecognition/json/dataset_testing.json",
-                    batch_size=FLAGS.batch_size * gpu_num,
-                    frames_per_step=c3d_model.NUM_FRAMES_PER_CLIP,
-                    im_size=c3d_model.CROP_SIZE,
-                    sess=sess)
+                # Select a random batch:
+                rand_indices = np.random.randint(val_X.shape[0], size=FLAGS.batch_size * gpu_num)
+                val_images = val_X[rand_indices]
+                val_labels = val_y[rand_indices]
                 summary, acc = sess.run([merged, accuracy], feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
                 print ("accuracy: " + "{:.5f}".format(acc))
                 test_writer.add_summary(summary, step)
