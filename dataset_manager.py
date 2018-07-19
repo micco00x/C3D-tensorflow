@@ -100,7 +100,7 @@ def get_frames(video_path, frames_per_step, segment, im_size, sess):
 #         path = search_path("datasets/Dataset_PatternRecognition/H3.6M", entry_name)
 #
 #         segment = training_entry["milliseconds"]
-# 
+#
 #         clip = get_frames(path, frames_per_step, segment, im_size, sess)
 #         batch[s,:,:,:,:] = clip
 #         labels[s] = DS_CLASSES.index(training_entry["label"])
@@ -127,6 +127,14 @@ def generate_dataset(videos_folder, json_filename, frames_per_step, im_size, ses
 
     print("Generating dataset:")
     for idx, (key, value) in enumerate(json_dataset.items()):
+
+        # Search correct folder for the path:
+        path = search_path(videos_folder, key)
+
+        X_video = []
+        y_video = []
+        segment_video = []
+
         for training_entry in value:
 
             print("Progress: {}/{}".format(cnt, tot_cnt), end="\r")
@@ -136,14 +144,26 @@ def generate_dataset(videos_folder, json_filename, frames_per_step, im_size, ses
             if not training_entry["label"] in DS_CLASSES:
                 continue
 
-            # Search correct folder for the path:
-            path = search_path(videos_folder, key)
-
             # Add element to dataset (X, y):
             segment = training_entry["milliseconds"]
+            segment_video.append(segment)
             clip = get_frames(path, frames_per_step, segment, im_size, sess)
-            X.append(clip)
-            y.append(DS_CLASSES.index(training_entry["label"]))
+            X_video.append(clip)
+            y_video.append(DS_CLASSES.index(training_entry["label"]))
+
+        # Build the labels considering multi label:
+        y_video_bag = [[0] * len(DS_CLASSES) for _ in range(len(y_video))]
+
+        # Consider multiple label if the video idxi contains at least
+        # 50% of a part of the video idxj:
+        for idxi in range(len(y_video)):
+            for idxj in range(len(y_video)):
+                if (min(segment_video[idxi][1], segment_video[idxj][1]) -
+                    max(segment_video[idxi][0], segment_video[idxj][0])) / (segment_video[idxi][1] - segment_video[idxi][0]) >= 0.5:
+                    y_video_bag[idxi][y_video[idxj]] = 1
+
+        X.extend(X_video)
+        y.extend(y_video_bag)
 
     print("Progress: COMPLETE")
 

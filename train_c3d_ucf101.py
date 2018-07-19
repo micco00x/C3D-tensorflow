@@ -56,7 +56,7 @@ def placeholder_inputs(batch_size):
                                                            c3d_model.CROP_SIZE,
                                                            c3d_model.CROP_SIZE,
                                                            c3d_model.CHANNELS))
-    labels_placeholder = tf.placeholder(tf.int64, shape=(batch_size))
+    labels_placeholder = tf.placeholder(tf.uint8, shape=(batch_size, len(input_data.DS_CLASSES)))
     return images_placeholder, labels_placeholder
 
 def average_gradients(tower_grads):
@@ -74,7 +74,8 @@ def average_gradients(tower_grads):
     return average_grads
 
 def tower_loss(name_scope, logit, labels):
-    cross_entropy_mean = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels,logits=logit))
+    #cross_entropy_mean = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels,logits=logit))
+    cross_entropy_mean = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=labels,logits=logit))
     tf.summary.scalar(name_scope + '_cross_entropy', cross_entropy_mean)
     weight_decay_loss = tf.get_collection('weightdecay_losses')
     tf.summary.scalar(name_scope + '_weight_decay_loss', tf.reduce_mean(weight_decay_loss) )
@@ -85,7 +86,8 @@ def tower_loss(name_scope, logit, labels):
     return total_loss
 
 def tower_acc(logit, labels):
-    correct_pred = tf.equal(tf.argmax(logit, 1), labels)
+    #correct_pred = tf.equal(tf.argmax(logit, 1), labels)
+    correct_pred = tf.equal(tf.round(tf.sigmoid(logit)), labels)
     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
     return accuracy
 
@@ -179,14 +181,14 @@ def run_training():
                                                 biases)
                 loss_name_scope = ('gpud_%d_loss' % gpu_index)
                 loss = tower_loss(loss_name_scope, logit,
-                                  labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size])
+                                  tf.cast(labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size], tf.float32))
                 grads1 = opt_stable.compute_gradients(loss, varlist1)
                 grads2 = opt_finetuning.compute_gradients(loss, varlist2)
                 tower_grads1.append(grads1)
                 tower_grads2.append(grads2)
                 logits.append(logit)
         logits = tf.concat(logits,0)
-        accuracy = tower_acc(logits, labels_placeholder)
+        accuracy = tower_acc(logits, tf.cast(labels_placeholder, tf.float32))
         tf.summary.scalar('accuracy', accuracy)
         grads1 = average_gradients(tower_grads1)
         grads2 = average_gradients(tower_grads2)
