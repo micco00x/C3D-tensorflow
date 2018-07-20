@@ -29,13 +29,15 @@ import numpy as np
 flags = tf.app.flags
 gpu_num = 1
 #flags.DEFINE_float('learning_rate', 0.0, 'Initial learning rate.')
-flags.DEFINE_integer('max_steps', 5000, 'Number of steps to run trainer.')
+#flags.DEFINE_integer('max_steps', 5000, 'Number of steps to run trainer.')
+flags.DEFINE_integer("epochs", 5, "Total number of epochs.")
 flags.DEFINE_integer('batch_size', 10, 'Batch size.')
 FLAGS = flags.FLAGS
 MOVING_AVERAGE_DECAY = 0.9999
 model_save_dir = './models'
 
-def placeholder_inputs(batch_size):
+#def placeholder_inputs(batch_size):
+def placeholder_inputs():
     """Generate placeholder variables to represent the input tensors.
 
     These placeholders are used as inputs by the rest of the model building
@@ -51,12 +53,12 @@ def placeholder_inputs(batch_size):
     # Note that the shapes of the placeholders match the shapes of the full
     # image and label tensors, except the first dimension is now batch_size
     # rather than the full size of the train or test data sets.
-    images_placeholder = tf.placeholder(tf.float32, shape=(batch_size,
+    images_placeholder = tf.placeholder(tf.float32, shape=(None,
                                                            c3d_model.NUM_FRAMES_PER_CLIP,
                                                            c3d_model.CROP_SIZE,
                                                            c3d_model.CROP_SIZE,
                                                            c3d_model.CHANNELS))
-    labels_placeholder = tf.placeholder(tf.uint8, shape=(batch_size, len(input_data.DS_CLASSES)))
+    labels_placeholder = tf.placeholder(tf.uint8, shape=(None, len(input_data.DS_CLASSES)))
     return images_placeholder, labels_placeholder
 
 def average_gradients(tower_grads):
@@ -85,11 +87,11 @@ def tower_loss(name_scope, logit, labels):
     tf.summary.scalar(name_scope + '_total_loss', tf.reduce_mean(total_loss) )
     return total_loss
 
-def tower_acc(logit, labels):
-    #correct_pred = tf.equal(tf.argmax(logit, 1), labels)
-    correct_pred = tf.equal(tf.round(tf.sigmoid(logit)), labels)
-    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-    return accuracy
+#def tower_acc(logit, labels):
+#    #correct_pred = tf.equal(tf.argmax(logit, 1), labels)
+#    correct_pred = tf.equal(tf.round(tf.sigmoid(logit)), labels)
+#    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+#    return accuracy
 
 def _variable_on_cpu(name, shape, initializer):
     with tf.device('/cpu:0'):
@@ -136,7 +138,8 @@ def run_training():
         global_step = tf.get_variable('global_step', [],
                                       initializer=tf.constant_initializer(0),
                                       trainable=False)
-        images_placeholder, labels_placeholder = placeholder_inputs(FLAGS.batch_size * gpu_num)
+        #images_placeholder, labels_placeholder = placeholder_inputs(FLAGS.batch_size * gpu_num)
+        images_placeholder, labels_placeholder = placeholder_inputs()
         tower_grads1 = []
         tower_grads2 = []
         logits = []
@@ -176,20 +179,30 @@ def run_training():
                 varlist1 = list( set(weights.values()) | set(biases.values()) - set(varlist2) )
                 logit = c3d_model.inference_c3d(images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size,:,:,:,:],
                                                 0.5,
-                                                FLAGS.batch_size,
+                                                #FLAGS.batch_size,
                                                 weights,
                                                 biases)
                 loss_name_scope = ('gpud_%d_loss' % gpu_index)
                 loss = tower_loss(loss_name_scope, logit,
                                   tf.cast(labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size], tf.float32))
+                loss_rm = tf.reduce_mean(loss)
                 grads1 = opt_stable.compute_gradients(loss, varlist1)
                 grads2 = opt_finetuning.compute_gradients(loss, varlist2)
                 tower_grads1.append(grads1)
                 tower_grads2.append(grads2)
                 logits.append(logit)
         logits = tf.concat(logits,0)
-        accuracy = tower_acc(logits, tf.cast(labels_placeholder, tf.float32))
-        tf.summary.scalar('accuracy', accuracy)
+        #accuracy = tower_acc(logits, tf.cast(labels_placeholder, tf.float32))
+        with tf.variable_scope("metrics"):
+            accuracy, accuracy_update_op = tf.metrics.accuracy(labels_placeholder, tf.round(tf.sigmoid(logits)))
+            precision, precision_update_op = tf.metrics.precision(labels_placeholder, tf.round(tf.sigmoid(logits)))
+            recall, recall_update_op = tf.metrics.recall(labels_placeholder, tf.round(tf.sigmoid(logits)))
+            f1score = 2 * precision * recall / (precision + recall)
+        tf.summary.scalar("accuracy", accuracy)
+        tf.summary.scalar("precision", precision)
+        tf.summary.scalar("recall", recall)
+        tf.summary.scalar("f1score", f1score)
+
         grads1 = average_gradients(tower_grads1)
         grads2 = average_gradients(tower_grads2)
         apply_gradient_op1 = opt_stable.apply_gradients(grads1)
@@ -199,63 +212,101 @@ def run_training():
         train_op = tf.group(apply_gradient_op1, apply_gradient_op2, variables_averages_op)
         null_op = tf.no_op()
 
-        # Create a saver for writing training checkpoints.
-        saver = tf.train.Saver(list(weights.values()) + list(biases.values()))
-        init = tf.global_variables_initializer()
+    # Create a saver for writing training checkpoints.
+    saver = tf.train.Saver(list(weights.values()) + list(biases.values()))
+    init = tf.global_variables_initializer()
+    metrics_vars = tf.get_collection(tf.GraphKeys.LOCAL_VARIABLES, scope="C3D/metrics")
+    metrics_vars_init = tf.variables_initializer(var_list=metrics_vars)
+    #init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
-        # Create a session for running Ops on the Graph.
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
-        sess.run(init)
-        if os.path.isfile(model_filename) and use_pretrained_model:
-            saver.restore(sess, model_filename)
+    # Create a session for running Ops on the Graph.
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+    sess.run(init)
+    if os.path.isfile(model_filename) and use_pretrained_model:
+        saver.restore(sess, model_filename)
 
-        # Create summary writter
-        merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
-        test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
+    # Create summary writter
+    merged = tf.summary.merge_all()
+    train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
+    test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
 
-        # TODO: pass these as args:
-        videos_folder = "datasets/Dataset_PatternRecognition/H3.6M"
-        train_json_filename = "datasets/Dataset_PatternRecognition/json/dataset_training.json"
-        train_npz_filename = "datasets/Dataset_PatternRecognition/npz/dataset_training.npz"
-        val_json_filename = "datasets/Dataset_PatternRecognition/json/dataset_testing.json"
-        val_npz_filename = "datasets/Dataset_PatternRecognition/npz/dataset_testing.npz"
+    # TODO: pass these as args:
+    videos_folder = "datasets/Dataset_PatternRecognition/H3.6M"
+    train_json_filename = "datasets/Dataset_PatternRecognition/json/dataset_training.json"
+    train_npz_filename = "datasets/Dataset_PatternRecognition/npz/dataset_training.npz"
+    val_json_filename = "datasets/Dataset_PatternRecognition/json/dataset_testing.json"
+    val_npz_filename = "datasets/Dataset_PatternRecognition/npz/dataset_testing.npz"
 
-        # Generate datasets:
-        train_X, train_y = _generate_dataset(train_npz_filename, sess, videos_folder, train_json_filename)
-        val_X, val_y = _generate_dataset(val_npz_filename, sess, videos_folder, val_json_filename)
+    # Generate datasets:
+    train_X, train_y = _generate_dataset(train_npz_filename, sess, videos_folder, train_json_filename)
+    val_X, val_y = _generate_dataset(val_npz_filename, sess, videos_folder, val_json_filename)
 
-        # Rescale train_X and val_X from [0,255] to [0,1]:
-        train_X = train_X.astype(np.float32) / 255.0
-        val_X = val_X.astype(np.float32) / 255.0
+    # Rescale train_X and val_X from [0,255] to [0,1]:
+    train_X = train_X.astype(np.float32) / 255.0
+    val_X = val_X.astype(np.float32) / 255.0
 
-        for step in xrange(FLAGS.max_steps):
-            start_time = time.time()
-            # Select a random batch:
-            rand_indices = np.random.randint(train_X.shape[0], size=FLAGS.batch_size * gpu_num)
-            train_images = train_X[rand_indices]
-            train_labels = train_y[rand_indices]
-            start_train_time = time.time()
-            sess.run(train_op, feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
-            curr_time = time.time()
-            duration = curr_time - start_time
-            print('Step %d: %.3f sec - %.3f sec' % (step, duration, curr_time - start_train_time))
+    # Train the network and compute metrics on train a val sets:
+    batch_size = FLAGS.batch_size * gpu_num
+    for epoch in range(FLAGS.epochs):
+        print("Epoch {}/{}:".format(epoch+1, FLAGS.epochs))
 
-            # Save a checkpoint and evaluate the model periodically.
-            if (step) % 10 == 0 or (step + 1) == FLAGS.max_steps:
-                saver.save(sess, os.path.join(model_save_dir, 'c3d_ucf_model'), global_step=step)
-                print('Training Data Eval:')
-                summary, acc = sess.run([merged, accuracy], feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
-                print ("accuracy: " + "{:.5f}".format(acc))
-                train_writer.add_summary(summary, step)
-                print('Validation Data Eval:')
-                # Select a random batch:
-                rand_indices = np.random.randint(val_X.shape[0], size=FLAGS.batch_size * gpu_num)
-                val_images = val_X[rand_indices]
-                val_labels = val_y[rand_indices]
-                summary, acc = sess.run([merged, accuracy], feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
-                print ("accuracy: " + "{:.5f}".format(acc))
-                test_writer.add_summary(summary, step)
+        # Reset metrics:
+        sess.run(metrics_vars_init)
+
+        # Iterate through training set:
+        rand_indices = np.random.randint(train_X.shape[0], size=train_X.shape[0])
+        for idx in range(0, train_X.shape[0], batch_size):
+            # Extract the following batch_size indices:
+            L = min(idx+batch_size, train_X.shape[0])
+            train_images = train_X[rand_indices[idx:L]]
+            train_labels = train_y[rand_indices[idx:L]]
+
+            # Update metrics and get results:
+            sess.run([train_op, accuracy_update_op, precision_update_op, recall_update_op],
+                feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
+            summary, train_curr_loss, train_curr_accuracy, train_curr_precision, train_curr_recall, train_curr_f1score = \
+                sess.run([merged, loss_rm, accuracy, precision, recall, f1score],
+                    feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
+
+            # Print results:
+            print("Progress: {}/{} - train_loss: {:2.3} - train_accuracy: {:2.3} - "
+                "train_precision: {:2.3} - train_recall: {:2.3} - train_f1score: {:2.3}"
+                .format(L, train_X.shape[0], train_curr_loss, train_curr_accuracy, train_curr_precision,
+                    train_curr_recall, train_curr_f1score), end="\r")
+        print("")
+
+        # Save metrics to TensorBoard:
+        train_writer.add_summary(summary, epoch+1)
+
+        # Reset metrics:
+        sess.run(metrics_vars_init)
+
+        # Iterate through validation set:
+        for idx in range(0, val_X.shape[0], batch_size):
+            # Extract the following batch_size indices:
+            L = min(idx+batch_size, val_X.shape[0])
+            val_images = val_X[idx:L]
+            val_labels = val_y[idx:L]
+
+            # Update metrics and get results:
+            sess.run([accuracy_update_op, precision_update_op, recall_update_op],
+                feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
+            summary, val_curr_loss, val_curr_accuracy, val_curr_precision, val_curr_recall, val_curr_f1score = \
+                sess.run([merged, loss_rm, accuracy, precision, recall, f1score],
+                    feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
+
+            # Print results:
+            print("Progress: {}/{} - val_loss: {:2.3} - val_accuracy: {:2.3} - "
+                "val_precision: {:2.3} - val_recall: {:2.3} - val_f1score: {:2.3}"
+                .format(L, val_X.shape[0], val_curr_loss, val_curr_accuracy, val_curr_precision,
+                    val_curr_recall, val_curr_f1score), end="\r")
+        print("")
+
+        # Save metrics to TensorBoard:
+        test_writer.add_summary(summary, epoch+1)
+
+        # Save checkpoint:
+        saver.save(sess, os.path.join(model_save_dir, 'c3d_ucf_model'), global_step=epoch+1)
     print("done")
 
 def main(_):
