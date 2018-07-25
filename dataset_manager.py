@@ -152,7 +152,7 @@ def generate_dataset(videos_folder, json_filename, frames_per_step, im_size, ses
             segment = training_entry["milliseconds"]
             segment_video.append(segment)
             clip = get_frames(path, frames_per_step, segment, im_size, sess)
-            X_video.append(clip)
+            X_video.append(clip.astype(np.uint8))
             y_video.append(DS_CLASSES.index(training_entry["label"]))
 
         # Build the labels considering multi label:
