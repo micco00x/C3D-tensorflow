@@ -12,6 +12,7 @@ import pprint
 import sys
 
 import PoseEstimation
+import c3d_model
 
 # There are also "G2-1", "G2-3", "G2-4" (torso:bend forward, torso:bend left, torso:bend right) in dataset_testing.json
 DS_CLASSES = ['head:Lean forward', 'head:Raise the head', 'head:Roll left',
@@ -65,7 +66,7 @@ def get_frames(video_path, frames_per_step, segment, im_size, sess):
 
     # for every frame in the clip extract frame, compute pose
     # and insert result in the matrix:
-    frames = np.zeros(shape=(frames_per_step, im_size, im_size, 3), dtype=float)
+    frames = np.zeros(shape=(frames_per_step, im_size, im_size, c3d_model.CHANNELS), dtype=float)
     for z in range(frames_per_step):
         frame = start_frame + z
         video.set(1, frame)

@@ -147,17 +147,17 @@ def run_training():
         opt_finetuning = tf.train.AdamOptimizer(1e-3)
         with tf.variable_scope('var_name') as var_scope:
             weights = {
-                'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 64], 0.0005),
-                'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 64, 128], 0.0005),
-                'wc3a': _variable_with_weight_decay('wc3a', [3, 3, 3, 128, 256], 0.0005),
-                'wc3b': _variable_with_weight_decay('wc3b', [3, 3, 3, 256, 256], 0.0005),
-                'wc4a': _variable_with_weight_decay('wc4a', [3, 3, 3, 256, 512], 0.0005),
-                'wc4b': _variable_with_weight_decay('wc4b', [3, 3, 3, 512, 512], 0.0005),
-                'wc5a': _variable_with_weight_decay('wc5a', [3, 3, 3, 512, 512], 0.0005),
-                'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 3, 512, 512], 0.0005),
+                'wc1': _variable_with_weight_decay('wc1', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 64], 0.0005),
+                'wc2': _variable_with_weight_decay('wc2', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 64, 128], 0.0005),
+                'wc3a': _variable_with_weight_decay('wc3a', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 128, 256], 0.0005),
+                'wc3b': _variable_with_weight_decay('wc3b', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 256, 256], 0.0005),
+                'wc4a': _variable_with_weight_decay('wc4a', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 256, 512], 0.0005),
+                'wc4b': _variable_with_weight_decay('wc4b', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 512, 512], 0.0005),
+                'wc5a': _variable_with_weight_decay('wc5a', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 512, 512], 0.0005),
+                'wc5b': _variable_with_weight_decay('wc5b', [c3d_model.CHANNELS, c3d_model.CHANNELS, c3d_model.CHANNELS, 512, 512], 0.0005),
                 'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.0005),
                 'wd2': _variable_with_weight_decay('wd2', [4096, 4096], 0.0005),
-                'out': _variable_with_weight_decay('wout', [4096, c3d_model.NUM_CLASSES], 0.0005)
+                'out': _variable_with_weight_decay('wout', [4096, len(input_data.DS_CLASSES)], 0.0005)
             }
             biases = {
                 'bc1': _variable_with_weight_decay('bc1', [64], 0.000),
@@ -170,7 +170,7 @@ def run_training():
                 'bc5b': _variable_with_weight_decay('bc5b', [512], 0.000),
                 'bd1': _variable_with_weight_decay('bd1', [4096], 0.000),
                 'bd2': _variable_with_weight_decay('bd2', [4096], 0.000),
-                'out': _variable_with_weight_decay('bout', [c3d_model.NUM_CLASSES], 0.000),
+                'out': _variable_with_weight_decay('bout', [len(input_data.DS_CLASSES)], 0.000),
             }
         for gpu_index in range(0, gpu_num):
             with tf.device('/gpu:%d' % gpu_index):
