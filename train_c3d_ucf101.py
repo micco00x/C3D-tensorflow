@@ -123,6 +123,11 @@ def _generate_dataset(npz_filename, sess, videos_folder=None, json_filename=None
         )
     return X, y
 
+# Preprocess the data before feeding it to the neural network:
+def _preprocess_data(X):
+    # Rescale X from [0,255] to [0,1]:
+    return X.astype(np.float32) / 255.0
+
 def run_training():
     # Get the sets of images and labels for training, validation, and
     # Tell TensorFlow that the model will be built into the default Graph.
@@ -241,10 +246,6 @@ def run_training():
     train_X, train_y = _generate_dataset(train_npz_filename, sess, videos_folder, train_json_filename)
     val_X, val_y = _generate_dataset(val_npz_filename, sess, videos_folder, val_json_filename)
 
-    # Rescale train_X and val_X from [0,255] to [0,1]:
-    train_X = train_X.astype(np.float32) / 255.0
-    val_X = val_X.astype(np.float32) / 255.0
-
     # Train the network and compute metrics on train a val sets:
     batch_size = FLAGS.batch_size * gpu_num
     for epoch in range(FLAGS.epochs):
@@ -258,7 +259,7 @@ def run_training():
         for idx in range(0, train_X.shape[0], batch_size):
             # Extract the following batch_size indices:
             L = min(idx+batch_size, train_X.shape[0])
-            train_images = train_X[rand_indices[idx:L]]
+            train_images = _preprocess_data(train_X[rand_indices[idx:L]])
             train_labels = train_y[rand_indices[idx:L]]
 
             # Update metrics and get results:
@@ -285,7 +286,7 @@ def run_training():
         for idx in range(0, val_X.shape[0], batch_size):
             # Extract the following batch_size indices:
             L = min(idx+batch_size, val_X.shape[0])
-            val_images = val_X[idx:L]
+            val_images = _preprocess_data(val_X[idx:L])
             val_labels = val_y[idx:L]
 
             # Update metrics and get results:
