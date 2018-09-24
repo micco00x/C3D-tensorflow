@@ -57,17 +57,18 @@ def compute_pose_frame(input_image, sess):
 
     # Extract argmax along axis 2:
     heatMat = np.amax(heatMat, axis=2)
-    pafMat = np.amax(pafMat, axis=2)
+    pafMat  = np.amax(pafMat,  axis=2)
 
-    # Resize heatMat, pafMat to match pose_image:
-    heatMat = cv2.resize(heatMat, dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
-    pafMat = cv2.resize(pafMat, dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
+    # Resize input_image, heatMat, pafMat to match pose_image:
+    input_image = cv2.resize(input_image, dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
+    heatMat     = cv2.resize(heatMat,     dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
+    pafMat      = cv2.resize(pafMat,      dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
 
     # Make sure there is a third dimension:
     heatMat = np.expand_dims(heatMat, axis=2)
-    pafMat = np.expand_dims(pafMat, axis=2)
+    pafMat  = np.expand_dims(pafMat,  axis=2)
 
-    # Concatenate pose_imageimage, heatMat and pafMat:
-    pose_image = np.concatenate((pose_image, heatMat, pafMat), axis=2)
+    # Concatenate input_image, pose_image, heatMat and pafMat:
+    pose_image = np.concatenate((input_image, pose_image, heatMat, pafMat), axis=2)
 
     return pose_image
