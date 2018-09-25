@@ -60,7 +60,6 @@ def compute_pose_frame(input_image, sess):
     pafMat  = np.amax(pafMat,  axis=2)
 
     # Resize input_image, heatMat, pafMat to match pose_image:
-    input_image = cv2.resize(input_image, dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
     heatMat     = cv2.resize(heatMat,     dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
     pafMat      = cv2.resize(pafMat,      dsize=(input_height, input_width), interpolation=cv2.INTER_CUBIC)
 
@@ -69,6 +68,6 @@ def compute_pose_frame(input_image, sess):
     pafMat  = np.expand_dims(pafMat,  axis=2)
 
     # Concatenate input_image, pose_image, heatMat and pafMat:
-    pose_image = np.concatenate((input_image, pose_image, heatMat, pafMat), axis=2)
+    pose_image = np.concatenate((image, pose_image, heatMat, pafMat), axis=2)
 
     return pose_image
