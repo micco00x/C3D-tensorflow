@@ -139,10 +139,16 @@ def generate_dataset(videos_folder, json_filename, frames_per_step, im_size, ses
         y_video = []
         segment_video = []
 
+        import time
+        time0 = time.time()
+        time1 = time.time()
+
         for training_entry in value:
 
-            print("Progress: {}/{}".format(cnt, tot_cnt), end="\r")
+            print("Progress: {}/{} [{}]".format(cnt, tot_cnt, time1-time0), end="\r")
             cnt += 1
+
+            time0 = time.time()
 
             # Skip labels not contained in DS_CLASSES:
             if not training_entry["label"] in DS_CLASSES:
@@ -154,6 +160,9 @@ def generate_dataset(videos_folder, json_filename, frames_per_step, im_size, ses
             clip = get_frames(path, frames_per_step, segment, im_size, sess)
             X_video.append(clip.astype(np.uint8))
             y_video.append(DS_CLASSES.index(training_entry["label"]))
+
+            time1 = time.time()
+
 
         # Build the labels considering multi label:
         y_video_bag = [[0] * len(DS_CLASSES) for _ in range(len(y_video))]
