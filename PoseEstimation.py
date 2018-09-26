@@ -45,11 +45,9 @@ def compute_pose_frame(input_image, sess):
 
     # Compute and draw the pose:
     vec = sess.run(net.get_output(name="concat_stage7"), feed_dict={"image:0": [image]})
-    run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
     pafMat, heatMat = sess.run([net.get_output(name=last_layer.format(stage=stage_level, aux=1)),
                                 net.get_output(name=last_layer.format(stage=stage_level, aux=2))],
-                               feed_dict={"image:0": [image]},
-                               options=run_options)
+                               feed_dict={"image:0": [image]})
     heatMat, pafMat = heatMat[0], pafMat[0]
     humans = estimate_pose(heatMat, pafMat)
     pose_image = np.zeros(tuple(image.shape), dtype=np.uint8)
