@@ -75,6 +75,11 @@ def average_gradients(tower_grads):
             average_grads.append(grad_and_var)
     return average_grads
 
+def _predict(logits, beta=1.2):
+    sigm_logits = tf.sigmoid(logits)
+    predictions = tf.round((tf.sign(sigm_logits - tf.reduce_mean(sigm_logits, axis=1, keepdims=True) * beta) + 1) / 2)
+    return predictions
+
 def tower_loss(name_scope, logit, labels):
     #cross_entropy_mean = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=labels,logits=logit))
     cross_entropy_mean = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(targets=labels,logits=logit, pos_weight=2.5))
@@ -199,6 +204,7 @@ def run_training():
         logits = tf.concat(logits,0)
         #accuracy = tower_acc(logits, tf.cast(labels_placeholder, tf.float32))
         with tf.variable_scope("metrics"):
+            # TODO: use _predict function:
             sigm_logits = tf.sigmoid(logits)
             predictions = tf.round((tf.sign(sigm_logits - tf.reduce_mean(sigm_logits, axis=1, keepdims=True) * 1.2) + 1) / 2)
             accuracy, accuracy_update_op = tf.metrics.accuracy(labels_placeholder, predictions)
@@ -250,6 +256,11 @@ def run_training():
     # Generate datasets:
     train_X, train_y = _generate_dataset(train_npz_filename, sess, videos_folder, train_json_filename)
     val_X, val_y = _generate_dataset(val_npz_filename, sess, videos_folder, val_json_filename)
+
+    # Uncomment to remove original images from dataset:
+    # (remeber to set c3d_model.CHANNELS to 5)
+    #train_X = train_X[:,:,:,:,3:]
+    #val_X = val_X[:,:,:,:,3:]
 
     # Train the network and compute metrics on train a val sets:
     batch_size = FLAGS.batch_size * gpu_num
