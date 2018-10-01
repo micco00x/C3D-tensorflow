@@ -33,7 +33,7 @@ gpu_num = 1
 flags.DEFINE_integer("epochs", 5, "Total number of epochs.")
 flags.DEFINE_integer('batch_size', 10, 'Batch size.')
 flags.DEFINE_string("mode", "train", "Modality of execution: train or eval.")
-flags.DEFINE_string("model_filename", "./sports1m_finetuning_ucf101.model.mdlp", "Path to checkpoint.")
+flags.DEFINE_string("model_metagraph", "./sports1m_finetuning_ucf101.model.mdlp", "Path to checkpoint.")
 FLAGS = flags.FLAGS
 MOVING_AVERAGE_DECAY = 0.9999
 model_save_dir = './models'
@@ -144,7 +144,7 @@ def run_training():
         os.makedirs(model_save_dir)
     use_pretrained_model = True
     #model_filename = "./sports1m_finetuning_ucf101.model"
-    model_filename = FLAGS.model_filename
+    model_filename = FLAGS.model_metagraph
 
     #with tf.Graph().as_default():
     with tf.variable_scope("C3D"):
@@ -242,14 +242,15 @@ def run_training():
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     sess.run(init)
     if FLAGS.mode == "train":
-        print("Restoring [TRAIN]", model_filename, os.path.isfile(model_filename))
-        if os.path.isfile(model_filename) and use_pretrained_model:
-            saver.restore(sess, model_filename)
+        print("Restoring [TRAIN]: starting from scratch.")
+        #print("Restoring [TRAIN]", model_filename, os.path.isfile(model_filename))
+        #if os.path.isfile(model_filename) and use_pretrained_model:
+        #    saver.restore(sess, model_filename)
     else:
         print("Restoring [EVAL]", model_filename, os.path.isfile(model_filename))
         saver = tf.train.import_meta_graph(model_filename)
-        print(model_filename[:model_filename.rindex(".")])
-        saver.restore(sess, model_filename[:model_filename.rindex(".")])
+        print(model_filename[:model_filename.rindex("/")])
+        saver.restore(sess, tf.train.latest_checkpoint(model_filename[:model_filename.rindex("/")]))
             
     # Create summary writter
     if FLAGS.mode == "train":
