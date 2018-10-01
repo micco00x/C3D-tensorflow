@@ -32,6 +32,8 @@ gpu_num = 1
 #flags.DEFINE_integer('max_steps', 5000, 'Number of steps to run trainer.')
 flags.DEFINE_integer("epochs", 5, "Total number of epochs.")
 flags.DEFINE_integer('batch_size', 10, 'Batch size.')
+flags.DEFINE_string("mode", "train", "Modality of execution: train or eval.")
+flags.DEFINE_string("model_filename", "./sports1m_finetuning_ucf101.model", "Path to checkpoint.")
 FLAGS = flags.FLAGS
 MOVING_AVERAGE_DECAY = 0.9999
 model_save_dir = './models'
@@ -141,7 +143,8 @@ def run_training():
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
     use_pretrained_model = True
-    model_filename = "./sports1m_finetuning_ucf101.model"
+    #model_filename = "./sports1m_finetuning_ucf101.model"
+    model_filename = FLAGS.model_filename
 
     #with tf.Graph().as_default():
     with tf.variable_scope("C3D"):
@@ -254,7 +257,8 @@ def run_training():
     val_npz_filename = "datasets/Dataset_PatternRecognition/npz/dataset_testing.npz"
 
     # Generate datasets:
-    train_X, train_y = _generate_dataset(train_npz_filename, sess, videos_folder, train_json_filename)
+    if FLAGS.mode == "train":
+        train_X, train_y = _generate_dataset(train_npz_filename, sess, videos_folder, train_json_filename)
     val_X, val_y = _generate_dataset(val_npz_filename, sess, videos_folder, val_json_filename)
 
     # Uncomment to remove original images from dataset:
@@ -264,37 +268,69 @@ def run_training():
 
     # Train the network and compute metrics on train a val sets:
     batch_size = FLAGS.batch_size * gpu_num
-    for epoch in range(FLAGS.epochs):
-        print("Epoch {}/{}:".format(epoch+1, FLAGS.epochs))
+    if FLAGS.mode == "train":
+        for epoch in range(FLAGS.epochs):
+            print("Epoch {}/{}:".format(epoch+1, FLAGS.epochs))
 
-        # Reset metrics:
-        sess.run(metrics_vars_init)
+            # Reset metrics:
+            sess.run(metrics_vars_init)
 
-        # Iterate through training set:
-        rand_indices = np.random.randint(train_X.shape[0], size=train_X.shape[0])
-        for idx in range(0, train_X.shape[0], batch_size):
-            # Extract the following batch_size indices:
-            L = min(idx+batch_size, train_X.shape[0])
-            train_images = _preprocess_data(train_X[rand_indices[idx:L]])
-            train_labels = train_y[rand_indices[idx:L]]
+            # Iterate through training set:
+            rand_indices = np.random.randint(train_X.shape[0], size=train_X.shape[0])
+            for idx in range(0, train_X.shape[0], batch_size):
+                # Extract the following batch_size indices:
+                L = min(idx+batch_size, train_X.shape[0])
+                train_images = _preprocess_data(train_X[rand_indices[idx:L]])
+                train_labels = train_y[rand_indices[idx:L]]
 
-            # Update metrics and get results:
-            sess.run([train_op, accuracy_update_op, precision_update_op, recall_update_op],
-                feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
-            summary, train_curr_loss, train_curr_accuracy, train_curr_precision, train_curr_recall, train_curr_f1score = \
-                sess.run([merged, loss_rm, accuracy, precision, recall, f1score],
+                # Update metrics and get results:
+                sess.run([train_op, accuracy_update_op, precision_update_op, recall_update_op],
                     feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
+                summary, train_curr_loss, train_curr_accuracy, train_curr_precision, train_curr_recall, train_curr_f1score = \
+                    sess.run([merged, loss_rm, accuracy, precision, recall, f1score],
+                        feed_dict={images_placeholder: train_images, labels_placeholder: train_labels})
 
-            # Print results:
-            print("Progress: {}/{} - train_loss: {:2.3} - train_accuracy: {:2.3} - "
-                "train_precision: {:2.3} - train_recall: {:2.3} - train_f1score: {:2.3}"
-                .format(L, train_X.shape[0], train_curr_loss, train_curr_accuracy, train_curr_precision,
-                    train_curr_recall, train_curr_f1score), end="\r")
-        print("")
+                # Print results:
+                print("Progress: {}/{} - train_loss: {:2.3} - train_accuracy: {:2.3} - "
+                    "train_precision: {:2.3} - train_recall: {:2.3} - train_f1score: {:2.3}"
+                    .format(L, train_X.shape[0], train_curr_loss, train_curr_accuracy, train_curr_precision,
+                        train_curr_recall, train_curr_f1score), end="\r")
+            print("")
 
-        # Save metrics to TensorBoard:
-        train_writer.add_summary(summary, epoch+1)
+            # Save metrics to TensorBoard:
+            train_writer.add_summary(summary, epoch+1)
 
+            # Reset metrics:
+            sess.run(metrics_vars_init)
+
+            # Iterate through validation set:
+            for idx in range(0, val_X.shape[0], batch_size):
+                # Extract the following batch_size indices:
+                L = min(idx+batch_size, val_X.shape[0])
+                val_images = _preprocess_data(val_X[idx:L])
+                val_labels = val_y[idx:L]
+
+                # Update metrics and get results:
+                sess.run([accuracy_update_op, precision_update_op, recall_update_op],
+                    feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
+                summary, val_curr_loss, val_curr_accuracy, val_curr_precision, val_curr_recall, val_curr_f1score = \
+                    sess.run([merged, loss_rm, accuracy, precision, recall, f1score],
+                        feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
+
+                # Print results:
+                print("Progress: {}/{} - val_loss: {:2.3} - val_accuracy: {:2.3} - "
+                    "val_precision: {:2.3} - val_recall: {:2.3} - val_f1score: {:2.3}"
+                    .format(L, val_X.shape[0], val_curr_loss, val_curr_accuracy, val_curr_precision,
+                        val_curr_recall, val_curr_f1score), end="\r")
+            print("")
+
+            # Save metrics to TensorBoard:
+            test_writer.add_summary(summary, epoch+1)
+
+            # Save checkpoint:
+            saver.save(sess, os.path.join(model_save_dir, 'c3d_ucf_model'), global_step=epoch+1)
+        print("done")
+    else:
         # Reset metrics:
         sess.run(metrics_vars_init)
 
@@ -318,13 +354,6 @@ def run_training():
                 .format(L, val_X.shape[0], val_curr_loss, val_curr_accuracy, val_curr_precision,
                     val_curr_recall, val_curr_f1score), end="\r")
         print("")
-
-        # Save metrics to TensorBoard:
-        test_writer.add_summary(summary, epoch+1)
-
-        # Save checkpoint:
-        saver.save(sess, os.path.join(model_save_dir, 'c3d_ucf_model'), global_step=epoch+1)
-    print("done")
 
 def main(_):
     run_training()
