@@ -33,7 +33,7 @@ gpu_num = 1
 flags.DEFINE_integer("epochs", 5, "Total number of epochs.")
 flags.DEFINE_integer('batch_size', 10, 'Batch size.')
 flags.DEFINE_string("mode", "train", "Modality of execution: train or eval.")
-flags.DEFINE_string("model_filename", "./sports1m_finetuning_ucf101.model", "Path to checkpoint.")
+flags.DEFINE_string("model_filename", "./sports1m_finetuning_ucf101.model.mdlp", "Path to checkpoint.")
 FLAGS = flags.FLAGS
 MOVING_AVERAGE_DECAY = 0.9999
 model_save_dir = './models'
@@ -241,13 +241,21 @@ def run_training():
     # Create a session for running Ops on the Graph.
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     sess.run(init)
-    if os.path.isfile(model_filename) and use_pretrained_model:
-        saver.restore(sess, model_filename)
-
+    if FLAGS.mode == "train":
+        print("Restoring [TRAIN]", model_filename, os.path.isfile(model_filename))
+        if os.path.isfile(model_filename) and use_pretrained_model:
+            saver.restore(sess, model_filename)
+    else:
+        print("Restoring [EVAL]", model_filename, os.path.isfile(model_filename))
+        saver = tf.train.import_meta_graph(model_filename)
+        print(model_filename[:model_filename.rindex(".")])
+        saver.restore(sess, model_filename[:model_filename.rindex(".")])
+            
     # Create summary writter
-    merged = tf.summary.merge_all()
-    train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
-    test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
+    if FLAGS.mode == "train":
+        merged = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
+        test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
 
     # TODO: pass these as args:
     videos_folder = "datasets/Dataset_PatternRecognition/H3.6M"
@@ -344,8 +352,8 @@ def run_training():
             # Update metrics and get results:
             sess.run([accuracy_update_op, precision_update_op, recall_update_op],
                 feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
-            summary, val_curr_loss, val_curr_accuracy, val_curr_precision, val_curr_recall, val_curr_f1score = \
-                sess.run([merged, loss_rm, accuracy, precision, recall, f1score],
+            val_curr_loss, val_curr_accuracy, val_curr_precision, val_curr_recall, val_curr_f1score = \
+                sess.run([loss_rm, accuracy, precision, recall, f1score],
                     feed_dict={images_placeholder: val_images, labels_placeholder: val_labels})
 
             # Print results:
