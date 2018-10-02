@@ -208,8 +208,9 @@ def run_training():
         #accuracy = tower_acc(logits, tf.cast(labels_placeholder, tf.float32))
         with tf.variable_scope("metrics"):
             # TODO: use _predict function:
-            sigm_logits = tf.sigmoid(logits)
-            predictions = tf.round((tf.sign(sigm_logits - tf.reduce_mean(sigm_logits, axis=1, keepdims=True) * 1.2) + 1) / 2)
+            #sigm_logits = tf.sigmoid(logits)
+            #predictions = tf.round((tf.sign(sigm_logits - tf.reduce_mean(sigm_logits, axis=1, keepdims=True) * 1.2) + 1) / 2)
+            predictions = _predict(logits, 1.5)
             accuracy, accuracy_update_op = tf.metrics.accuracy(labels_placeholder, predictions)
             precision, precision_update_op = tf.metrics.precision(labels_placeholder, predictions)
             recall, recall_update_op = tf.metrics.recall(labels_placeholder, predictions)
@@ -272,7 +273,8 @@ def run_training():
 
     # Uncomment to remove original images from dataset:
     # (remeber to set c3d_model.CHANNELS to 5)
-    #train_X = train_X[:,:,:,:,3:]
+    #if FLAGS.mode == "train":
+    #    train_X = train_X[:,:,:,:,3:]
     #val_X = val_X[:,:,:,:,3:]
 
     # Train the network and compute metrics on train a val sets:
